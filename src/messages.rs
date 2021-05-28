@@ -3,14 +3,45 @@
 //! [RFC-001]: https://github.com/ZcashFoundation/redjubjub/blob/main/rfcs/0001-messages.md
 #![allow(dead_code)]
 
-use crate::{frost, verification_key::VerificationKey, SpendAuth};
+use serde::{Deserialize, Serialize};
+use crate::{verification_key::VerificationKey, SpendAuth};
 
 use std::collections::HashMap;
 
 mod constants;
 mod validate;
 
+/// Define our own `Secret` type instead of using `frost::Secret`.
+///
+/// The serialization design specifies that `Secret` is a `Scalar` that uses:
+/// "a 32-byte little-endian canonical representation".
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Secret([u8; 32]);
+
+/// Define our own `Commitment` type instead of using `frost::Commitment`.
+///
+/// The serialization design specifies that `Commitment` is a `AffinePoint` that uses:
+/// "a 32-byte little-endian canonical representation".
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Commitment([u8; 32]);
+
+/// Define our own `GroupCommitment` type instead of using `frost::GroupCommitment`.
+///
+/// The serialization design specifies that `GroupCommitment` is a `AffinePoint` that uses:
+/// "a 32-byte little-endian canonical representation".
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GroupCommitment([u8; 32]);
+
+/// Define our own `SignatureResponse` type instead of using `frost::SignatureResponse`.
+///
+/// The serialization design specifies that `SignatureResponse` is a `Scalar` that uses:
+/// "a 32-byte little-endian canonical representation".
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SignatureResponse([u8; 32]);
+
+
 /// The data required to serialize a frost message.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Message {
     header: Header,
     payload: Payload,
@@ -19,6 +50,7 @@ pub struct Message {
 /// The data required to serialize the common header fields for every message.
 ///
 /// Note: the `msg_type` is derived from the `payload` enum variant.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Header {
     version: MsgVersion,
     sender: ParticipantId,
@@ -26,6 +58,7 @@ pub struct Header {
 }
 
 /// The data required to serialize the payload for a message.
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Payload {
     SharePackage(SharePackage),
     SigningCommitments(SigningCommitments),
@@ -37,6 +70,7 @@ pub enum Payload {
 /// The numeric values used to identify each `Payload` variant during serialization.
 #[repr(u8)]
 #[non_exhaustive]
+#[derive(Serialize, Deserialize, Debug)]
 enum MsgType {
     SharePackage,
     SigningCommitments,
@@ -46,7 +80,7 @@ enum MsgType {
 }
 
 /// The numeric values used to identify the protocol version during serialization.
-#[derive(PartialEq)]
+#[derive(PartialEq, Serialize, Deserialize, Debug)]
 pub struct MsgVersion(u8);
 
 /// The numeric values used to identify each participant during serialization.
@@ -63,7 +97,7 @@ pub struct MsgVersion(u8);
 /// ID `i` will be given a share with value `f(i)`.
 /// Since a DKG may be implemented in the future, we recommend that the ID `0` be declared invalid."
 /// https://raw.githubusercontent.com/ZcashFoundation/redjubjub/main/zcash-frost-audit-report-20210323.pdf#d
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, Eq, Hash, PartialOrd, Serialize, Deserialize, Debug)]
 pub enum ParticipantId {
     /// A serialized participant ID for a signer.
     ///
@@ -82,33 +116,36 @@ pub enum ParticipantId {
 /// the `sign()` function.
 ///
 /// Note: `frost::SharePackage.public` can be calculated from `secret_share`.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SharePackage {
     /// The public signing key that represents the entire group:
     /// `frost::SharePackage.group_public`.
     group_public: VerificationKey<SpendAuth>,
     /// This participant's secret key share: `frost::SharePackage.share.value`.
-    secret_share: frost::Secret,
+    secret_share: Secret,
     /// The commitments to the coefficients for our secret polynomial _f_,
     /// used to generate participants' key shares. Participants use these to perform
     /// verifiable secret sharing.
-    share_commitment: Vec<frost::Commitment>,
+    share_commitment: Vec<Commitment>,
 }
 
 /// The data required to serialize `frost::SigningCommitments`.
 ///
 /// Each signer must send this message to the aggregator.
 /// A signing commitment from the first round of the signing protocol.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SigningCommitments {
     /// The hiding point: `frost::SigningCommitments.hiding`
-    hiding: frost::Commitment,
+    hiding: Commitment,
     /// The binding point: `frost::SigningCommitments.binding`
-    binding: frost::Commitment,
+    binding: Commitment,
 }
 
 /// The data required to serialize `frost::SigningPackage`.
 ///
 /// The aggregator decides what message is going to be signed and
 /// sends it to each signer with all the commitments collected.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SigningPackage {
     /// The collected commitments for each signer as a hashmap of
     /// unique participant identifiers: `frost::SigningPackage.signing_commitments`
@@ -125,18 +162,20 @@ pub struct SigningPackage {
 ///
 /// Each signer sends their signatures to the aggregator who is going to collect them
 /// and generate a final spend signature.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SignatureShare {
     /// This participant's signature over the message: `frost::SignatureShare.signature`
-    signature: frost::SignatureResponse,
+    signature: SignatureResponse,
 }
 
 /// The data required to serialize a successful output from `frost::aggregate()`.
 ///
 /// The final signature is broadcasted by the aggregator to all signers.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AggregateSignature {
     /// The aggregated group commitment: `Signature<SpendAuth>.r_bytes` returned by `frost::aggregate`
-    group_commitment: frost::GroupCommitment,
+    group_commitment: GroupCommitment,
     /// A plain Schnorr signature created by summing all the signature shares:
     /// `Signature<SpendAuth>.s_bytes` returned by `frost::aggregate`
-    schnorr_signature: frost::SignatureResponse,
+    schnorr_signature: SignatureResponse,
 }
